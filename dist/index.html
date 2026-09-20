@@ -4,23 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#202624" />
-    <meta name="description" content="한글 이름을 흘림 폰트와 아이소메트릭 꽃꽂이 구조로 변환합니다." />
-    <title>흘림 꽃병</title>
+    <meta name="description" content="FLOURISH transforms a Hangul name into a cursive composition and an isometric ikebana structure." />
+    <title>FLOURISH</title>
     <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%23202624'/%3E%3Cpath d='M5 19C10 8 17 26 27 11' fill='none' stroke='%2361CCAF' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='6' cy='19' r='2.3' fill='%23F4F7F6'/%3E%3Ccircle cx='27' cy='11' r='2.3' fill='%23F4F7F6'/%3E%3C/svg%3E" />
     <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <header class="toolbar">
-      <div class="identity" aria-label="흘림 꽃병">
-        <span class="identity-mark" aria-hidden="true"></span>
-        <span>흘림 꽃병</span>
+      <div class="identity">
+        <span>FLOURISH : A Fabrication Study of Ikebana and Cursive</span>
       </div>
 
       <label class="name-field">
-        <span>이름을 입력하세요</span>
+        <span>ENTER YOUR NAME</span>
         <input id="name-input" value="이수민" maxlength="8" autocomplete="off" spellcheck="false" />
       </label>
 
+      <div class="studio-meta">2026-2 basic studio 4<br />Sumin Lee</div>
     </header>
 
     <main class="workspace" aria-live="polite">
@@ -29,7 +29,6 @@
           <div>
             <h1 id="font-title">NAME COMPOSITION</h1>
           </div>
-          <span id="token-count" class="measure">불러오는 중</span>
         </div>
 
         <div class="font-canvas">
@@ -37,10 +36,6 @@
           <div id="empty-font" class="empty-state" hidden>한글 이름을 입력해 주세요.</div>
         </div>
 
-        <div class="font-footer">
-          <span id="token-line">자모 데이터를 준비하고 있습니다.</span>
-          <span class="legend-line"><i></i>흘림 조인트</span>
-        </div>
       </section>
 
       <section class="object-view" aria-labelledby="object-title">
@@ -48,7 +43,6 @@
           <div>
             <h2 id="object-title">FLOWER VASE ASSEMBLY</h2>
           </div>
-          <span id="object-measure" class="measure">3 LAYERS</span>
         </div>
 
         <div class="object-canvas">
@@ -57,7 +51,6 @@
         </div>
 
         <div class="object-footer">
-          <span id="status-line">이름의 칸 수에 따라 받침과 기둥 위치가 달라집니다.</span>
           <span id="unsupported" class="error-message" hidden></span>
         </div>
       </section>

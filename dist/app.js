@@ -16,10 +16,6 @@ const fontSvg = document.querySelector("#font-svg");
 const vaseSvg = document.querySelector("#vase-svg");
 const emptyFont = document.querySelector("#empty-font");
 const emptyObject = document.querySelector("#empty-object");
-const tokenLine = document.querySelector("#token-line");
-const tokenCount = document.querySelector("#token-count");
-const objectMeasure = document.querySelector("#object-measure");
-const statusLine = document.querySelector("#status-line");
 const unsupportedLine = document.querySelector("#unsupported");
 
 let fontData = null;
@@ -359,11 +355,19 @@ function createBaseGeometry(cellCount) {
   const right = (cellCount + 1) * step;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
-  const chamfer = halfStep;
   const outline = [
-    [left + chamfer, back], [right - chamfer, back], [right, back + gridRise],
-    [right, front - gridRise], [right - chamfer, front], [left + chamfer, front],
-    [left, front - gridRise], [left, back + gridRise]
+    [left, back],
+    [right - halfStep, back],
+    [right, back + gridRise],
+    [right - halfStep, back + 2 * gridRise],
+    [right, back + 3 * gridRise],
+    [right - halfStep, back + 4 * gridRise],
+    [right, front],
+    [left + halfStep, front],
+    [left, back + 4 * gridRise],
+    [left + halfStep, back + 3 * gridRise],
+    [left, back + 2 * gridRise],
+    [left + halfStep, back + gridRise]
   ];
   const segments = [];
   const holes = [];
@@ -414,6 +418,10 @@ function makeFlowerCluster(anchor, index) {
 }
 
 function addFlowerCluster(svg, flower) {
+  const group = svgEl("g", {
+    transform: `rotate(${flower.angle} ${flower.baseX} ${flower.baseY})`,
+    class: "photo-flower-wrap"
+  });
   const image = svgEl("image", {
     href: `./${flower.file}`,
     x: flower.x,
@@ -424,8 +432,11 @@ function addFlowerCluster(svg, flower) {
     class: "photo-flower",
     filter: "url(#mint-photo-filter)"
   });
-  image.setAttribute("transform", `rotate(${flower.angle} ${flower.baseX} ${flower.baseY})`);
-  svg.append(image);
+  if (flower.mirror) {
+    image.setAttribute("transform", `translate(${2 * flower.baseX} 0) scale(-1 1)`);
+  }
+  group.append(image);
+  svg.append(group);
 }
 
 function renderObject(layerDefinitions, name) {
@@ -449,7 +460,14 @@ function renderObject(layerDefinitions, name) {
   const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
   const flowerCount = Math.max(6, syllableCount * 3 + Math.floor(topLayer.assembly.cellCount / 4));
   const flowerTargets = selectOverlapAnchors(openOverlapCandidates, bounds, flowerCount);
-  const flowers = flowerTargets.map((point, index) => makeFlowerCluster(point, index));
+  const flowerTypeCounts = new Map();
+  const flowers = flowerTargets.map((point, index) => {
+    const flower = makeFlowerCluster(point, index);
+    const occurrence = flowerTypeCounts.get(flower.file) || 0;
+    flower.mirror = occurrence % 2 === 1;
+    flowerTypeCounts.set(flower.file, occurrence + 1);
+    return flower;
+  });
 
   const projected = [
     ...base.flatMap(point => [iso(point, -10), iso(point, 0)]),
@@ -542,14 +560,6 @@ function update() {
   renderFont(assembly, name);
   renderObject(layerDefinitions, name);
 
-  const tokenText = assembly.layout.filter(item => item.token).map(item => item.token).join(" · ");
-  tokenLine.textContent = tokenText ? `자모  ${tokenText}` : "한글 이름을 입력하면 자모가 배열됩니다.";
-  tokenCount.textContent = `${assembly.cellCount} CELLS · ${assembly.curves.length} CURVES`;
-  objectMeasure.textContent = `${assembly.cellCount} CELLS · 3 LAYERS`;
-  statusLine.textContent = name
-    ? layerDefinitions.slice().reverse().map(layer => `${layer.label} ${layer.name}`).join(" · ")
-    : "이름의 칸 수에 따라 받침과 기둥 위치가 달라집니다.";
-
   if (assembly.unsupported.length) {
     unsupportedLine.hidden = false;
     unsupportedLine.textContent = `지원하지 않는 문자: ${assembly.unsupported.join(" ")}`;
@@ -610,8 +620,6 @@ fetch("./font-data.json")
     registerNameTool();
   })
   .catch(error => {
-    tokenLine.textContent = error.message;
-    tokenCount.textContent = "DATA ERROR";
     unsupportedLine.hidden = false;
-    unsupportedLine.textContent = "폰트 데이터를 확인해 주세요.";
+    unsupportedLine.textContent = error.message || "폰트 데이터를 확인해 주세요.";
   });
