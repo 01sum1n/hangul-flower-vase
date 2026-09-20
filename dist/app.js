@@ -563,8 +563,8 @@ function renderObject(layerDefinitions, name) {
   });
   baseGeometry.holes.forEach(point => {
     const [x, y] = iso(point, 2);
-    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 4.3, ry: 2.5, class: "base-hole" }));
-    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 1.4, ry: .9, class: "base-hole-core" }));
+    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 2.15, ry: 1.25, class: "base-hole" }));
+    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: .7, ry: .45, class: "base-hole-core" }));
   });
   vaseSvg.append(gridGroup);
 
