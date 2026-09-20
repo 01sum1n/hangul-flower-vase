@@ -256,29 +256,6 @@ function createLayerAssemblies(name) {
   ].map(layer => ({ ...layer, assembly: composeName(layer.name) }));
 }
 
-function objectScaleFactors() {
-  const glyphCircle = fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points || [];
-  const circleStart = glyphCircle[0] || [0, 0];
-  const circleEnd = glyphCircle.at(-1) || [45, 25.9808];
-  const triangleSide = Math.hypot(circleEnd[0] - circleStart[0], circleEnd[1] - circleStart[1]);
-  const sourceRise = Math.abs(circleEnd[1] - circleStart[1]) || 25.9808;
-  return {
-    x: triangleSide / fontData.cellStep,
-    y: (triangleSide * Math.sqrt(3) / 2) / sourceRise
-  };
-}
-
-function scaleAssemblyForObject(assembly) {
-  const scale = objectScaleFactors();
-  return {
-    ...assembly,
-    curves: assembly.curves.map(curve => ({
-      ...curve,
-      points: curve.points.map(([x, y, z = 0]) => [x * scale.x, y * scale.y, z])
-    }))
-  };
-}
-
 function sampledGlyphPoints(assembly, stride = 4) {
   const samples = [];
   assembly.curves.filter(curve => curve.kind === "glyph").forEach(curve => {
@@ -366,15 +343,13 @@ function selectOverlapAnchors(candidates, bounds, count = 3) {
 }
 
 function createBaseGeometry(cellCount) {
-  const glyphCircle = fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points || [];
-  const circleStart = glyphCircle[0] || [0, 0];
-  const circleEnd = glyphCircle.at(-1) || [45, 25.9808];
-  const step = Math.hypot(circleEnd[0] - circleStart[0], circleEnd[1] - circleStart[1]);
+  const jointDelta = fontData.joints?.J0?.delta || [15, 25.9808];
+  const step = Math.round(Math.hypot(jointDelta[0], jointDelta[1]) * 1000) / 1000;
   const halfStep = step / 2;
-  const gridRise = step * Math.sqrt(3) / 2;
+  const gridRise = Math.abs(jointDelta[1]);
   const rowCount = 5;
   const left = -step;
-  const nameEnd = cellCount * step;
+  const nameEnd = cellCount * fontData.cellStep;
   const right = nameEnd + halfStep;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
@@ -441,6 +416,26 @@ function selectDistributedSupports(candidates, count) {
   return selected.sort((first, second) => first[0] - second[0] || first[1] - second[1]);
 }
 
+function selectSixCellSupports(candidates, count, triangleSide) {
+  if (!count || !candidates.length) return [];
+  const pitch = triangleSide * 6;
+  const centerCandidates = candidates.filter(point => Math.abs(point[1]) <= 0.25);
+  const sequences = centerCandidates.map(start => {
+    const points = [start];
+    for (let index = 1; index < count; index += 1) {
+      const targetX = start[0] + pitch * index;
+      const match = centerCandidates.find(point => Math.abs(point[0] - targetX) <= 0.25);
+      if (!match) return null;
+      points.push(match);
+    }
+    return points;
+  }).filter(Boolean);
+  if (sequences.length) {
+    return sequences.sort((first, second) => Math.abs(first[0][0]) - Math.abs(second[0][0]))[0];
+  }
+  return selectDistributedSupports(candidates, count);
+}
+
 function makeFlowerCluster(anchor, index) {
   const [baseX, baseY] = iso(anchor, 3);
   const variants = [
@@ -491,7 +486,7 @@ function addFlowerCluster(svg, flower) {
 
 function renderObject(layerDefinitions, name) {
   vaseSvg.replaceChildren();
-  const objectLayers = layerDefinitions.map(layer => ({ ...layer, assembly: scaleAssemblyForObject(layer.assembly) }));
+  const objectLayers = layerDefinitions;
   const topLayer = objectLayers.find(layer => layer.key === "top");
   if (!topLayer?.assembly.curves.length) {
     emptyObject.hidden = false;
@@ -507,7 +502,8 @@ function renderObject(layerDefinitions, name) {
   const topZ = topLayer.z;
   const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
   const commonSupports = commonCurveSupportHoles(objectLayers, baseGeometry.holes);
-  const supports = selectDistributedSupports(commonSupports, Math.max(2, syllableCount + 1));
+  const triangleSide = Math.round(Math.hypot(...fontData.joints.J0.delta) * 1000) / 1000;
+  const supports = selectSixCellSupports(commonSupports, syllableCount, triangleSide);
   const overlapCandidates = collectOverlapCandidates(objectLayers);
   const openOverlapCandidates = overlapCandidates.filter(candidate => supports.every(point => vectorError(point, candidate.point) >= 24));
   const flowerCount = Math.max(6, syllableCount * 3 + Math.floor(topLayer.assembly.cellCount / 4));
