@@ -62,6 +62,8 @@ button, input { font: inherit; font-family: "Pretendard", sans-serif; }
   line-height: 1.25;
 }
 
+.identity-lead { margin-right: .28em; }
+
 .name-field {
   display: grid;
   grid-template-columns: max-content 1fr;
@@ -182,7 +184,7 @@ h1, h2 {
 .error-message { color: var(--joint-dark); }
 
 .base-shadow { fill: rgba(32, 38, 36, .13); filter: blur(8px); }
-.base-bottom { fill: var(--base-side); stroke: var(--ink); stroke-width: 1.4; }
+.base-side-face { fill: var(--base-side); stroke: var(--ink); stroke-width: 1.4; stroke-linejoin: round; }
 .base-top { fill: var(--base); stroke: var(--ink); stroke-width: 1.5; }
 .base-grid { fill: none; stroke: #65706c; stroke-width: 1.25; opacity: .58; }
 .base-hole { fill: var(--base); stroke: var(--joint-dark); stroke-width: 1.1; }
@@ -241,6 +243,9 @@ h1, h2 {
 @media (max-width: 600px) {
   .toolbar { min-height: 0; padding: 18px 16px 16px; gap: 16px; }
   .identity { font-size: 15px; }
+  .identity-lead,
+  .identity-subtitle { display: block; }
+  .identity-lead { margin: 0 0 2px; }
   .name-field { grid-template-columns: 1fr; gap: 3px; padding-bottom: 3px; }
   .name-field span { font-size: 12px; }
   .name-field input { font-size: 16px; line-height: 1.15; }

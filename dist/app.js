@@ -221,6 +221,11 @@ function polygonPath(points, z = 0, offsetY = 0) {
   }).join(" ")} Z`;
 }
 
+function baseSidePath(first, second, topZ = 0, bottomZ = -10) {
+  const points = [iso(first, topZ), iso(second, topZ), iso(second, bottomZ), iso(first, bottomZ)];
+  return `${points.map((point, index) => `${index ? "L" : "M"}${point[0].toFixed(2)} ${point[1].toFixed(2)}`).join(" ")} Z`;
+}
+
 function distanceToAssembly(point, assembly) {
   return Math.min(...assembly.curves.flatMap(curve => curve.points.map(sample => vectorError(point, sample))));
 }
@@ -360,37 +365,34 @@ function createBaseGeometry(cellCount) {
   const right = left + columnCount * step;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
+  const rowBounds = Array.from({ length: rowCount + 1 }, (_, row) => {
+    const offset = row % 2 ? halfStep : 0;
+    return {
+      y: back + row * gridRise,
+      start: left + offset,
+      end: right - halfStep + offset
+    };
+  });
   const outline = [
-    [left, back],
-    [right - halfStep, back],
-    [right, back + gridRise],
-    [right - halfStep, back + 2 * gridRise],
-    [right, back + 3 * gridRise],
-    [right - halfStep, back + 4 * gridRise],
-    [right, front],
-    [left + halfStep, front],
-    [left, back + 4 * gridRise],
-    [left + halfStep, back + 3 * gridRise],
-    [left, back + 2 * gridRise],
-    [left + halfStep, back + gridRise]
+    [rowBounds[0].start, rowBounds[0].y],
+    [rowBounds[0].end, rowBounds[0].y],
+    ...rowBounds.slice(1).map(row => [row.end, row.y]),
+    [rowBounds.at(-1).start, rowBounds.at(-1).y],
+    ...rowBounds.slice(1, -1).reverse().map(row => [row.start, row.y])
   ];
   const segments = [];
   const holes = [];
 
   for (let row = 0; row <= rowCount; row += 1) {
-    const y = back + row * gridRise;
-    const offset = row % 2 ? halfStep : 0;
-    const rowStart = left + offset;
-    const rowEnd = right - halfStep + offset;
+    const { y, start: rowStart, end: rowEnd } = rowBounds[row];
     segments.push([[rowStart, y], [rowEnd, y]]);
     for (let x = rowStart; x <= rowEnd + 0.01; x += step) {
       const isInsideEdge = x > rowStart + 0.01 && x < rowEnd - 0.01;
       if (row > 0 && row < rowCount && isInsideEdge) holes.push([x, y, 0]);
       if (row < rowCount) {
         const nextY = y + gridRise;
-        const nextOffset = (row + 1) % 2 ? halfStep : 0;
-        const nextStart = left + nextOffset;
-        const nextEnd = right - halfStep + nextOffset;
+        const nextStart = rowBounds[row + 1].start;
+        const nextEnd = rowBounds[row + 1].end;
         [[x - halfStep, nextY], [x + halfStep, nextY]].forEach(endpoint => {
           if (endpoint[0] >= nextStart - 0.01 && endpoint[0] <= nextEnd + 0.01) {
             segments.push([[x, y], endpoint]);
@@ -517,7 +519,17 @@ function renderObject(layerDefinitions, name) {
   vaseSvg.append(defs);
 
   vaseSvg.append(svgEl("path", { d: polygonPath(base, -18, 14), class: "base-shadow" }));
-  vaseSvg.append(svgEl("path", { d: polygonPath(base, -10), class: "base-bottom" }));
+  base.map((point, index) => {
+    const next = base[(index + 1) % base.length];
+    const firstScreen = iso(point, 0);
+    const secondScreen = iso(next, 0);
+    return {
+      d: baseSidePath(point, next),
+      depth: (firstScreen[1] + secondScreen[1]) / 2
+    };
+  }).sort((first, second) => first.depth - second.depth).forEach(side => {
+    vaseSvg.append(svgEl("path", { d: side.d, class: "base-side-face" }));
+  });
   vaseSvg.append(svgEl("path", { d: polygonPath(base, 0), class: "base-top" }));
 
   const gridGroup = svgEl("g", { "clip-path": "url(#base-grid-clip)" });
