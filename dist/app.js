@@ -230,15 +230,6 @@ function distanceToAssembly(point, assembly) {
   return Math.min(...assembly.curves.flatMap(curve => curve.points.map(sample => vectorError(point, sample))));
 }
 
-function nearestPointInAssembly(point, assembly) {
-  return assembly.curves
-    .flatMap(curve => curve.points)
-    .reduce((nearest, sample) => {
-      const distance = vectorError(point, sample);
-      return !nearest || distance < nearest.distance ? { point: sample, distance } : nearest;
-    }, null);
-}
-
 function syllableSupportColumns(value) {
   const supports = [[0, 0, 0]];
   let slots = 0;
@@ -352,17 +343,12 @@ function selectOverlapAnchors(candidates, bounds, count = 3) {
 }
 
 function createBaseGeometry(cellCount) {
-  const glyphCircle = fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points || [];
-  const circleStart = glyphCircle[0] || [0, 0];
-  const circleEnd = glyphCircle.at(-1) || [45, 25.9808];
-  const step = Math.hypot(circleEnd[0] - circleStart[0], circleEnd[1] - circleStart[1]);
+  const step = fontData.cellStep;
   const halfStep = step / 2;
-  const gridRise = step * Math.sqrt(3) / 2;
+  const gridRise = Math.abs(fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points?.at(-1)?.[1] || 25.9808);
   const rowCount = 5;
   const left = -step;
-  const requiredWidth = cellCount * fontData.cellStep + 2 * step;
-  const columnCount = Math.ceil(requiredWidth / step);
-  const right = left + columnCount * step;
+  const right = (cellCount + 0.5) * step;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
   const rowBounds = Array.from({ length: rowCount + 1 }, (_, row) => {
@@ -404,14 +390,28 @@ function createBaseGeometry(cellCount) {
   return { outline, segments, holes };
 }
 
-function snapSupportsToBaseHoles(supports, holes) {
-  const centerRow = holes.filter(point => Math.abs(point[1]) < 0.01);
-  if (!centerRow.length) return supports;
-  const snapped = supports.map(support => centerRow.reduce((nearest, hole) => {
-    const distance = Math.abs(hole[0] - support[0]);
-    return !nearest || distance < nearest.distance ? { point: hole, distance } : nearest;
-  }, null).point);
-  return snapped.filter((point, index, list) => index === 0 || vectorError(point, list[index - 1]) > 0.01);
+function commonCurveSupportHoles(layerDefinitions, holes, tolerance = 1.25) {
+  return holes
+    .filter(hole => layerDefinitions.every(layer => distanceToAssembly(hole, layer.assembly) <= tolerance))
+    .sort((first, second) => first[0] - second[0] || first[1] - second[1]);
+}
+
+function selectDistributedSupports(candidates, count) {
+  if (candidates.length <= count) return candidates;
+  const minX = candidates[0][0];
+  const maxX = candidates.at(-1)[0];
+  const selected = [];
+  for (let index = 0; index < count; index += 1) {
+    const ratio = count === 1 ? 0.5 : index / (count - 1);
+    const targetX = minX + (maxX - minX) * ratio;
+    const available = candidates.filter(candidate => !selected.includes(candidate));
+    const nearest = available.reduce((best, candidate) => {
+      const distance = Math.abs(candidate[0] - targetX);
+      return !best || distance < best.distance ? { candidate, distance } : best;
+    }, null);
+    if (nearest) selected.push(nearest.candidate);
+  }
+  return selected.sort((first, second) => first[0] - second[0] || first[1] - second[1]);
 }
 
 function makeFlowerCluster(anchor, index) {
@@ -477,10 +477,11 @@ function renderObject(layerDefinitions, name) {
   const baseGeometry = createBaseGeometry(topLayer.assembly.cellCount);
   const base = baseGeometry.outline;
   const topZ = topLayer.z;
-  const supports = snapSupportsToBaseHoles(syllableSupportColumns(name), baseGeometry.holes);
+  const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
+  const commonSupports = commonCurveSupportHoles(layerDefinitions, baseGeometry.holes);
+  const supports = selectDistributedSupports(commonSupports, Math.max(2, syllableCount + 1));
   const overlapCandidates = collectOverlapCandidates(layerDefinitions);
   const openOverlapCandidates = overlapCandidates.filter(candidate => supports.every(point => vectorError(point, candidate.point) >= 24));
-  const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
   const flowerCount = Math.max(6, syllableCount * 3 + Math.floor(topLayer.assembly.cellCount / 4));
   const flowerTargets = selectOverlapAnchors(openOverlapCandidates, bounds, flowerCount);
   const flowerTypeCounts = new Map();
@@ -560,15 +561,6 @@ function renderObject(layerDefinitions, name) {
     });
 
     supports.forEach(point => {
-      const nearest = nearestPointInAssembly(point, layer.assembly);
-      if (nearest && nearest.distance > 1.5) {
-        const arm = svgEl("g", { class: "plate-glyph support-arm" });
-        const armPoints = [point, nearest.point];
-        arm.append(svgEl("path", { d: linePath(armPoints, sample => iso(sample, layer.z - 4)), class: "plate-side" }));
-        arm.append(svgEl("path", { d: linePath(armPoints, sample => iso(sample, layer.z)), class: "plate-edge" }));
-        arm.append(svgEl("path", { d: linePath(armPoints, sample => iso(sample, layer.z)), class: "plate-top" }));
-        vaseSvg.append(arm);
-      }
       const [x, y] = iso(point, layer.z + 1);
       vaseSvg.append(svgEl("ellipse", { cx: x, cy: y, rx: 4.2, ry: 2.2, class: "washer" }));
       vaseSvg.append(svgEl("ellipse", { cx: x, cy: y - .6, rx: 1.8, ry: 1.1, class: "bolt-cap" }));

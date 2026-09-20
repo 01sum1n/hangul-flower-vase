@@ -197,8 +197,6 @@ h1, h2 {
 .plate-top { fill: none; stroke: rgba(222, 247, 240, .97); stroke-width: 8.4; stroke-linecap: round; stroke-linejoin: round; }
 .plate-joint .plate-edge { stroke: var(--joint-dark); }
 .plate-joint .plate-top { stroke: rgba(145, 222, 201, .96); }
-.support-arm .plate-edge { stroke: #56645f; }
-.support-arm .plate-top { stroke: rgba(218, 239, 233, .98); }
 .washer { fill: #edf5f2; stroke: #42504b; stroke-width: 1; }
 .bolt-cap { fill: var(--joint-dark); stroke: #fff; stroke-width: .8; }
 .photo-flower { opacity: .7; pointer-events: none; }
