@@ -347,12 +347,17 @@ function selectOverlapAnchors(candidates, bounds, count = 3) {
 }
 
 function createBaseGeometry(cellCount) {
-  const step = fontData.cellStep;
+  const glyphCircle = fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points || [];
+  const circleStart = glyphCircle[0] || [0, 0];
+  const circleEnd = glyphCircle.at(-1) || [45, 25.9808];
+  const step = Math.hypot(circleEnd[0] - circleStart[0], circleEnd[1] - circleStart[1]);
   const halfStep = step / 2;
-  const gridRise = Math.abs(fontData.joints?.J0?.delta?.[1] || 25.9808);
+  const gridRise = step * Math.sqrt(3) / 2;
   const rowCount = 5;
   const left = -step;
-  const right = (cellCount + 1) * step;
+  const requiredWidth = cellCount * fontData.cellStep + 2 * step;
+  const columnCount = Math.ceil(requiredWidth / step);
+  const right = left + columnCount * step;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
   const outline = [
@@ -374,14 +379,20 @@ function createBaseGeometry(cellCount) {
 
   for (let row = 0; row <= rowCount; row += 1) {
     const y = back + row * gridRise;
-    segments.push([[left, y], [right, y]]);
     const offset = row % 2 ? halfStep : 0;
-    for (let x = left + offset; x <= right + 0.01; x += step) {
-      if (row > 0 && row < rowCount) holes.push([x, y, 0]);
+    const rowStart = left + offset;
+    const rowEnd = right - halfStep + offset;
+    segments.push([[rowStart, y], [rowEnd, y]]);
+    for (let x = rowStart; x <= rowEnd + 0.01; x += step) {
+      const isInsideEdge = x > rowStart + 0.01 && x < rowEnd - 0.01;
+      if (row > 0 && row < rowCount && isInsideEdge) holes.push([x, y, 0]);
       if (row < rowCount) {
         const nextY = y + gridRise;
+        const nextOffset = (row + 1) % 2 ? halfStep : 0;
+        const nextStart = left + nextOffset;
+        const nextEnd = right - halfStep + nextOffset;
         [[x - halfStep, nextY], [x + halfStep, nextY]].forEach(endpoint => {
-          if (endpoint[0] >= left - 0.01 && endpoint[0] <= right + 0.01) {
+          if (endpoint[0] >= nextStart - 0.01 && endpoint[0] <= nextEnd + 0.01) {
             segments.push([[x, y], endpoint]);
           }
         });
@@ -389,6 +400,16 @@ function createBaseGeometry(cellCount) {
     }
   }
   return { outline, segments, holes };
+}
+
+function snapSupportsToBaseHoles(supports, holes) {
+  const centerRow = holes.filter(point => Math.abs(point[1]) < 0.01);
+  if (!centerRow.length) return supports;
+  const snapped = supports.map(support => centerRow.reduce((nearest, hole) => {
+    const distance = Math.abs(hole[0] - support[0]);
+    return !nearest || distance < nearest.distance ? { point: hole, distance } : nearest;
+  }, null).point);
+  return snapped.filter((point, index, list) => index === 0 || vectorError(point, list[index - 1]) > 0.01);
 }
 
 function makeFlowerCluster(anchor, index) {
@@ -454,7 +475,7 @@ function renderObject(layerDefinitions, name) {
   const baseGeometry = createBaseGeometry(topLayer.assembly.cellCount);
   const base = baseGeometry.outline;
   const topZ = topLayer.z;
-  const supports = syllableSupportColumns(name);
+  const supports = snapSupportsToBaseHoles(syllableSupportColumns(name), baseGeometry.holes);
   const overlapCandidates = collectOverlapCandidates(layerDefinitions);
   const openOverlapCandidates = overlapCandidates.filter(candidate => supports.every(point => vectorError(point, candidate.point) >= 24));
   const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
