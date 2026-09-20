@@ -256,6 +256,29 @@ function createLayerAssemblies(name) {
   ].map(layer => ({ ...layer, assembly: composeName(layer.name) }));
 }
 
+function objectScaleFactors() {
+  const glyphCircle = fontData.glyphs?.["ㅇ"]?.curves?.[0]?.points || [];
+  const circleStart = glyphCircle[0] || [0, 0];
+  const circleEnd = glyphCircle.at(-1) || [45, 25.9808];
+  const triangleSide = Math.hypot(circleEnd[0] - circleStart[0], circleEnd[1] - circleStart[1]);
+  const sourceRise = Math.abs(circleEnd[1] - circleStart[1]) || 25.9808;
+  return {
+    x: triangleSide / fontData.cellStep,
+    y: (triangleSide * Math.sqrt(3) / 2) / sourceRise
+  };
+}
+
+function scaleAssemblyForObject(assembly) {
+  const scale = objectScaleFactors();
+  return {
+    ...assembly,
+    curves: assembly.curves.map(curve => ({
+      ...curve,
+      points: curve.points.map(([x, y, z = 0]) => [x * scale.x, y * scale.y, z])
+    }))
+  };
+}
+
 function sampledGlyphPoints(assembly, stride = 4) {
   const samples = [];
   assembly.curves.filter(curve => curve.kind === "glyph").forEach(curve => {
@@ -351,9 +374,8 @@ function createBaseGeometry(cellCount) {
   const gridRise = step * Math.sqrt(3) / 2;
   const rowCount = 5;
   const left = -step;
-  const nameEnd = cellCount * fontData.cellStep;
-  const evenRowEnd = left + Math.ceil((nameEnd - left) / step) * step;
-  const right = evenRowEnd + halfStep;
+  const nameEnd = cellCount * step;
+  const right = nameEnd + halfStep;
   const back = -2 * gridRise;
   const front = back + rowCount * gridRise;
   const rowBounds = Array.from({ length: rowCount + 1 }, (_, row) => {
@@ -395,16 +417,10 @@ function createBaseGeometry(cellCount) {
   return { outline, segments, holes };
 }
 
-function commonCurveSupportPoints(layerDefinitions, tolerance = 0.25) {
-  const sourcePoints = layerDefinitions.at(-1).assembly.curves.flatMap(curve => curve.points);
-  const candidates = sourcePoints.filter(point => (
-    layerDefinitions.every(layer => distanceToAssembly(point, layer.assembly) <= tolerance)
-  ));
-  const unique = [];
-  candidates.forEach(point => {
-    if (unique.every(existing => vectorError(existing, point) >= 5)) unique.push(point);
-  });
-  return unique.sort((first, second) => first[0] - second[0] || first[1] - second[1]);
+function commonCurveSupportHoles(layerDefinitions, holes, tolerance = 0.25) {
+  return holes
+    .filter(hole => layerDefinitions.every(layer => distanceToAssembly(hole, layer.assembly) <= tolerance))
+    .sort((first, second) => first[0] - second[0] || first[1] - second[1]);
 }
 
 function selectDistributedSupports(candidates, count) {
@@ -475,7 +491,8 @@ function addFlowerCluster(svg, flower) {
 
 function renderObject(layerDefinitions, name) {
   vaseSvg.replaceChildren();
-  const topLayer = layerDefinitions.find(layer => layer.key === "top");
+  const objectLayers = layerDefinitions.map(layer => ({ ...layer, assembly: scaleAssemblyForObject(layer.assembly) }));
+  const topLayer = objectLayers.find(layer => layer.key === "top");
   if (!topLayer?.assembly.curves.length) {
     emptyObject.hidden = false;
     vaseSvg.removeAttribute("viewBox");
@@ -483,15 +500,15 @@ function renderObject(layerDefinitions, name) {
   }
   emptyObject.hidden = true;
 
-  const worldPoints = layerDefinitions.flatMap(layer => layer.assembly.curves.flatMap(curve => curve.points));
+  const worldPoints = objectLayers.flatMap(layer => layer.assembly.curves.flatMap(curve => curve.points));
   const bounds = pointsBounds(worldPoints);
   const baseGeometry = createBaseGeometry(topLayer.assembly.cellCount);
   const base = baseGeometry.outline;
   const topZ = topLayer.z;
   const syllableCount = Array.from(String(name || "").normalize("NFC")).filter(character => !/\s/.test(character)).length;
-  const commonSupports = commonCurveSupportPoints(layerDefinitions);
+  const commonSupports = commonCurveSupportHoles(objectLayers, baseGeometry.holes);
   const supports = selectDistributedSupports(commonSupports, Math.max(2, syllableCount + 1));
-  const overlapCandidates = collectOverlapCandidates(layerDefinitions);
+  const overlapCandidates = collectOverlapCandidates(objectLayers);
   const openOverlapCandidates = overlapCandidates.filter(candidate => supports.every(point => vectorError(point, candidate.point) >= 24));
   const flowerCount = Math.max(6, syllableCount * 3 + Math.floor(topLayer.assembly.cellCount / 4));
   const flowerTargets = selectOverlapAnchors(openOverlapCandidates, bounds, flowerCount);
@@ -506,7 +523,7 @@ function renderObject(layerDefinitions, name) {
 
   const projected = [
     ...base.flatMap(point => [iso(point, -10), iso(point, 0)]),
-    ...layerDefinitions.flatMap(layer => layer.assembly.curves.flatMap(curve => curve.points.map(point => iso(point, layer.z)))),
+    ...objectLayers.flatMap(layer => layer.assembly.curves.flatMap(curve => curve.points.map(point => iso(point, layer.z)))),
     ...supports.map(point => iso(point, topZ + 36)),
     ...flowers.flatMap(flower => [[flower.x, flower.y], [flower.x + flower.width, flower.y + flower.height]])
   ];
@@ -553,11 +570,6 @@ function renderObject(layerDefinitions, name) {
     gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 4.3, ry: 2.5, class: "base-hole" }));
     gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 1.4, ry: .9, class: "base-hole-core" }));
   });
-  supports.forEach(point => {
-    const [x, y] = iso(point, 2.4);
-    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 4.8, ry: 2.8, class: "base-hole support-hole" }));
-    gridGroup.append(svgEl("ellipse", { cx: x, cy: y, rx: 1.6, ry: 1, class: "base-hole-core" }));
-  });
   vaseSvg.append(gridGroup);
 
   supports.forEach(point => {
@@ -567,7 +579,7 @@ function renderObject(layerDefinitions, name) {
     vaseSvg.append(svgEl("line", { x1: start[0] - 1, y1: start[1], x2: end[0] - 1, y2: end[1], class: "post-light" }));
   });
 
-  layerDefinitions.forEach(layer => {
+  objectLayers.forEach(layer => {
     layer.assembly.curves.forEach(curve => {
       const group = svgEl("g", { class: curve.kind === "joint" ? "plate-joint" : "plate-glyph" });
       group.append(svgEl("path", { d: linePath(curve.points, point => iso(point, layer.z - 4)), class: "plate-side" }));
