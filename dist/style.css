@@ -56,13 +56,20 @@ button, input { font: inherit; font-family: "Pretendard", sans-serif; }
 }
 
 .identity {
-  max-width: 520px;
-  font-size: clamp(15px, 1.35vw, 20px);
+  max-width: 560px;
+  display: grid;
+  justify-items: start;
+  gap: 6px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.25;
 }
 
-.identity-lead { margin-right: .28em; }
+.identity-logo {
+  width: min(100%, 430px);
+  height: auto;
+  display: block;
+}
 
 .name-field {
   display: grid;
@@ -240,10 +247,8 @@ h1, h2 {
 
 @media (max-width: 600px) {
   .toolbar { min-height: 0; padding: 18px 16px 16px; gap: 16px; }
-  .identity { font-size: 15px; }
-  .identity-lead,
-  .identity-subtitle { display: block; }
-  .identity-lead { margin: 0 0 2px; }
+  .identity { gap: 4px; font-size: 12px; }
+  .identity-logo { width: min(100%, 330px); }
   .name-field { grid-template-columns: 1fr; gap: 3px; padding-bottom: 3px; }
   .name-field span { font-size: 12px; }
   .name-field input { font-size: 16px; line-height: 1.15; }
